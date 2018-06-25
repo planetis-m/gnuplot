@@ -23,11 +23,13 @@ proc getCurrentFigure(): Figure =
 proc setCurrentFigure(fig: Figure) =
    currentFigure = fig
 
-template cmd*(cmd: string) =
+proc cmd*(cmd: string) =
    ## Send a command to gnuplot
+   let fig = getCurrentFigure()
    assert(fig != nil, "Initialize a new Figure with startGnuplot")
    when defined(debugGnuplot): echo cmd
    fig.content.add cmd
+   fig.content.add "\n"
 
 proc startGnuplot*() =
    ## Starts gnuplot
@@ -46,7 +48,7 @@ proc closeGnuplot*() =
 
    let p = startProcess(gnuplotExe, args = ["-persist"])
    let inp = p.inputStream()
-   inp.writeLine(fig.content)
+   inp.write(fig.content)
    inp.flush()
 
    discard p.waitForExit()
@@ -56,7 +58,8 @@ proc closeGnuplot*() =
       echo(resp)
    p.close()
 
-template plotCmd(replot: bool): string =
+proc plotCmd(replot: bool): string =
+   let fig = getCurrentFigure()
    if replot and fig.replot:
       "replot "
    else:
@@ -67,6 +70,7 @@ template plotFunctionImpl(extra: typed) =
    if title != "":
       line.add " title '" & title & "' "
    cmd(line)
+   let fig = getCurrentFigure()
    fig.replot = true
 
 template plotDataImpl(extra: typed) =
@@ -76,6 +80,7 @@ template plotDataImpl(extra: typed) =
          else: " title '" & title & "' "
       line = plotCmd(replot) & extra & title_line
    cmd(line)
+   let fig = getCurrentFigure()
    fig.replot = true
 
 proc plot*(equation: string, title = "", args = "", replot = true) =
@@ -83,16 +88,15 @@ proc plot*(equation: string, title = "", args = "", replot = true) =
    ##
    ## .. code-block:: nim
    ##   plot "sin(x)/x"
-   let fig = getCurrentFigure()
    plotFunctionImpl(args)
 
-template format(x: string): string =
+template fmt(x: string): string =
    x
 
-template format(x: float): string =
+template fmt(x: float): string =
    formatFloat(x, ffDecimal, 6)
 
-template format(x: untyped): string =
+template fmt(x: untyped): string =
    $x
 
 proc plot*[T](xs: openarray[T], title = "",
@@ -105,10 +109,9 @@ proc plot*[T](xs: openarray[T], title = "",
    ##   let xs = newSeqWith(20, random(1.0))
    ##
    ##   plot xs, "random values"
-   let fig = getCurrentFigure()
    cmd("$d << EOD")
    for x in xs:
-      cmd(format(x))
+      cmd(fmt(x))
    cmd("EOD")
    plotDataImpl(" $d " & args)
 
@@ -156,10 +159,9 @@ proc plot*[X, Y](xs: openarray[X], ys: openarray[Y],
    ##   plot x, y, "spiral"
    if xs.len != ys.len:
       raise newException(ValueError, "xs and ys must have same length")
-   let fig = getCurrentFigure()
    cmd("$d << EOD")
    for i in low(xs) .. high(xs):
-      cmd(format(xs[i]) & " " & format(ys[i]))
+      cmd(fmt(xs[i]) & " " & fmt(ys[i]))
    cmd("EOD")
    plotDataImpl(" $d using 1:2 " & args)
 
@@ -170,7 +172,6 @@ proc pdf*(filename = "tmp.pdf", width = 16.9, height = 12.7) =
    ##
    ## .. code-block:: nim
    ##   pdf(filename="myFigure.pdf")  # overwrites/creates myFigure.pdf
-   let fig = getCurrentFigure()
    cmd("my_export_sz = '" & $width & "," & $height & "'")
    cmd("cmd = exportPdf('" & filename & "')")
    cmd("@cmd")
@@ -182,7 +183,6 @@ proc png*(filename = "tmp.png", width = 640, height = 480) =
    ##
    ## .. code-block:: nim
    ##   pdf(filename="myFigure.png")  # overwrites/creates myFigure.png
-   let fig = getCurrentFigure()
    cmd("my_export_sz = '" & $width & "," & $height & "'")
    cmd("cmd = exportPdf('" & filename & "')")
    cmd("@cmd")
