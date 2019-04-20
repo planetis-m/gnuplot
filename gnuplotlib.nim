@@ -13,7 +13,7 @@ var
 proc newFigure(): Figure =
    ## Initiates a new Figure that communicates with gnuplot
    new(result)
-   result.content = newStringOfCap(8_000)
+   result.content = newStringOfCap(1_000)
    result.idNum = nextIdNum
    inc(nextIdNum)
 
@@ -29,7 +29,7 @@ proc cmd*(cmd: string) =
    assert(fig != nil, "Initialize a new Figure with startGnuplot")
    when defined(debugGnuplot): echo cmd
    fig.content.add cmd
-   fig.content.add "\n"
+   fig.content.add '\n'
 
 proc startGnuplot*() =
    ## Starts gnuplot
@@ -157,8 +157,7 @@ proc plot*[X, Y](xs: openarray[X], ys: openarray[Y],
    ##     y[i] = f * cos(f)
    ##
    ##   plot x, y, "spiral"
-   if xs.len != ys.len:
-      raise newException(ValueError, "xs and ys must have same length")
+   assert(xs.len == ys.len, "xs and ys must have same length")
    cmd("$d << EOD")
    for i in low(xs) .. high(xs):
       cmd(fmt(xs[i]) & " " & fmt(ys[i]))
