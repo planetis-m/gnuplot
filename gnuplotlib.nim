@@ -1,12 +1,10 @@
-import std / [osproc, os, streams, strutils]
+import std / [osproc, os, streams, strutils, exitprocs]
 
 type
-  Figure = object
+  Figure = ref object
     content: string
     idNum: int
     replot: bool
-
-proc `=destroy`*(fig: var Figure)
 
 var
   nextIdNum = 0
@@ -14,21 +12,22 @@ var
 
 let gnuplotExe = findExe("gnuplot")
 
-proc getCurrentFigure*(): var Figure =
-  assert(currentFigure.idNum != 0, "Initialize a new global Figure with startGnuplot")
+proc getCurrentFigure*(): Figure =
+  assert(currentFigure != nil, "Initialize a new global Figure with startGnuplot")
   currentFigure
 
-proc setCurrentFigure*(fig: sink Figure) =
-  assert(currentFigure.idNum == 0, "Global gnuplot Figure already instantiated")
+proc setCurrentFigure*(fig: Figure) =
+  assert(currentFigure == nil, "Global gnuplot Figure already instantiated")
   currentFigure = fig
 
-proc cmd*(cmd: string; fig: var Figure = getCurrentFigure()) =
+proc cmd*(cmd: string; fig: Figure = nil) =
   ## Send a command to gnuplot
+  let fig = if fig == nil: getCurrentFigure() else: fig
   when defined(debugGnuplot): echo "Figure id: ", fig.idNum, ", Contents:\n", cmd
   fig.content.add cmd
   fig.content.add "\n"
 
-proc initFigure*(): Figure =
+proc newFigure*(): Figure =
   ## Initiates a new Figure that communicates with gnuplot
   if gnuplotExe == "":
     raise newException(OSError, "Cannot find gnuplot: exe not in PATH")
@@ -38,26 +37,25 @@ proc initFigure*(): Figure =
 
 proc startGnuplot*() =
   ## Starts gnuplot in a global instance
-  var fig = initFigure()
+  let fig = newFigure()
   setCurrentFigure(fig)
 
-proc `=destroy`*(fig: var Figure) =
+proc closeGnuplot*(fig: Figure = nil) =
   ## close figure at the end of the session
-  if fig.idNum != 0:
-    cmd("exit", fig)
-    ## Starts gnuplot
-    let p = startProcess(gnuplotExe, args = ["-persist"])
-    let inp = p.inputStream()
-    inp.write(fig.content)
-    inp.flush()
+  let fig = if fig == nil: getCurrentFigure() else: fig
+  cmd("exit", fig)
+  ## Starts gnuplot
+  let p = startProcess(gnuplotExe, args = ["-persist"])
+  let inp = p.inputStream()
+  inp.write(fig.content)
+  inp.flush()
 
-    `=destroy`(fig.content)
-    discard p.waitForExit()
-    if p.hasData():
-      let outp = p.outputStream()
-      let resp = outp.readAll()
-      echo(resp)
-    p.close()
+  discard p.waitForExit()
+  if p.hasData():
+    let outp = p.outputStream()
+    let resp = outp.readAll()
+    echo(resp)
+  p.close()
 
 proc plotCmd(replot: bool; fig: Figure): string =
   if replot and fig.replot:
@@ -82,11 +80,12 @@ template plotDataImpl(extra: typed) =
   fig.replot = true
 
 proc plot*(equation: string; title, args = ""; replot = true;
-    fig: var Figure = getCurrentFigure()) =
+    fig: Figure = nil) =
   ## Plot an equation as understood by gnuplot. e.g.:
   ##
   ## .. code-block:: nim
   ##   plot "sin(x)/x"
+  let fig = if fig == nil: getCurrentFigure() else: fig
   plotFunctionImpl(args)
 
 template fmt(x: string): string =
@@ -99,7 +98,7 @@ template fmt(x: untyped): string =
   $x
 
 proc plot*[T](xs: openarray[T]; title, args = ""; replot = true;
-    fig: var Figure = getCurrentFigure()) =
+    fig: Figure = nil) =
   ## plot an array or seq of float64 values. e.g.:
   ##
   ## .. code-block:: nim
@@ -108,6 +107,7 @@ proc plot*[T](xs: openarray[T]; title, args = ""; replot = true;
   ##   let xs = newSeqWith(20, rand(1.0))
   ##
   ##   plot xs, "random values"
+  let fig = if fig == nil: getCurrentFigure() else: fig
   cmd("$d << EOD", fig)
   for x in xs:
     cmd(fmt(x), fig)
@@ -115,7 +115,7 @@ proc plot*[T](xs: openarray[T]; title, args = ""; replot = true;
   plotDataImpl(" $d " & args)
 
 proc plot*[X, Y](xs: openarray[X]; ys: openarray[Y];
-    title, args = ""; replot = true; fig: var Figure = getCurrentFigure()) =
+    title, args = ""; replot = true; fig: Figure = nil) =
   ## plot points taking x and y values from corresponding pairs in
   ## the given arrays.
   ##
@@ -157,6 +157,7 @@ proc plot*[X, Y](xs: openarray[X]; ys: openarray[Y];
   ##
   ##   plot x, y, "spiral"
   assert(xs.len == ys.len, "xs and ys must have the same length")
+  let fig = if fig == nil: getCurrentFigure() else: fig
   cmd("$d << EOD", fig)
   for i in 0 .. high(xs):
     cmd(fmt(xs[i]) & " " & fmt(ys[i]), fig)
@@ -164,25 +165,30 @@ proc plot*[X, Y](xs: openarray[X]; ys: openarray[Y];
   plotDataImpl(" $d using 1:2 " & args)
 
 proc pdf*(filename = "tmp.pdf"; width = 16.9; height = 12.7;
-    fig: var Figure = getCurrentFigure()) =
+    fig: Figure = nil) =
   ## script to make gnuplot print into a pdf file
   ## Size is given in cm.
   ## In order to change the font edit gnuplot variable my_font in style_template.
   ##
   ## .. code-block:: nim
   ##   pdf(filename="myFigure.pdf")  # overwrites/creates myFigure.pdf
+  let fig = if fig == nil: getCurrentFigure() else: fig
   cmd("my_export_sz = '" & $width & "," & $height & "'", fig)
   cmd("cmd = exportPdf('" & filename & "')", fig)
   cmd("@cmd", fig)
 
 proc png*(filename = "tmp.png", width = 640, height = 480;
-    fig: var Figure = getCurrentFigure()) =
+    fig: Figure = nil) =
   ## script to make gnuplot print into a png file
   ## Size is given in pixels.
   ## In order to change the font edit gnuplot variable my_font in style_template.
   ##
   ## .. code-block:: nim
   ##   pdf(filename="myFigure.png")  # overwrites/creates myFigure.png
+  let fig = if fig == nil: getCurrentFigure() else: fig
   cmd("my_export_sz = '" & $width & "," & $height & "'", fig)
   cmd("cmd = exportPdf('" & filename & "')", fig)
   cmd("@cmd", fig)
+
+if currentFigure != nil:
+  addExitProc(proc () {.noconv.} = closeGnuplot(getCurrentFigure()))

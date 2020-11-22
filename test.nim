@@ -16,12 +16,13 @@ let
   y = newSeqWith(len(x), rand(10.0))
 
 #startGnuplot()
-var fig = initFigure()
+let fig = newFigure()
 cmd "set timefmt '%Y-%m-%d'", fig
 cmd "set xdata time", fig
-
 plot x, y, "somecoin value over time", fig = fig
-var fig2 = initFigure()
+closeGnuplot(fig)
+let fig2 = newFigure()
 
 plot "sin(x)", title = "sin(x)", args = "with lines linestyle 2", fig = fig2
 plot "cos(x)", title = "cos(x)", args = "with lines linestyle 3", fig = fig2
+closeGnuplot(fig2)
