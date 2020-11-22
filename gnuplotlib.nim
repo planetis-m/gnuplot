@@ -15,7 +15,7 @@ proc setCurrentProc*(p: Process) =
 
 proc cmd*(cmd: string) =
   ## Send a command to gnuplot
-  when defined(debugGnuplot): echo "Contents:\n", cmd
+  when defined(debugGnuplot): echo cmd
   let p = getCurrentProc()
   try:
     let inp = p.inputStream()
@@ -42,7 +42,7 @@ proc startGnuplot*() =
   createThread(backgroundThread, watchOutput, p)
   cmd("load 'setup.gp'")
 
-proc close() {.noconv.} =
+proc closeGnuplot() {.noconv.} =
   ## close Process at the end of the session
   let p = getCurrentProc()
   cmd("exit")
@@ -76,7 +76,6 @@ proc plot*(equation: string; title, args = ""; replot = true) =
   ##
   ## .. code-block:: nim
   ##   plot "sin(x)/x"
-  let p = getCurrentProc()
   plotFunctionImpl(args)
 
 template fmt(x: string): string =
@@ -97,7 +96,6 @@ proc plot*[T](xs: openarray[T]; title, args = ""; replot = true) =
   ##   let xs = newSeqWith(20, rand(1.0))
   ##
   ##   plot xs, "random values"
-  let p = getCurrentProc()
   cmd("$d << EOD")
   for x in xs:
     cmd(fmt(x))
@@ -147,7 +145,6 @@ proc plot*[X, Y](xs: openarray[X]; ys: openarray[Y];
   ##
   ##   plot x, y, "spiral"
   assert(xs.len == ys.len, "xs and ys must have the same length")
-  let p = getCurrentProc()
   cmd("$d << EOD")
   for i in 0 .. high(xs):
     cmd(fmt(xs[i]) & " " & fmt(ys[i]))
@@ -161,7 +158,6 @@ proc pdf*(filename = "tmp.pdf"; width = 16.9; height = 12.7) =
   ##
   ## .. code-block:: nim
   ##   pdf(filename="myProcess.pdf")  # overwrites/creates myProcess.pdf
-  let p = getCurrentProc()
   cmd("my_export_sz = '" & $width & "," & $height & "'")
   cmd("cmd = exportPdf('" & filename & "')")
   cmd("@cmd")
@@ -173,9 +169,8 @@ proc png*(filename = "tmp.png", width = 640, height = 480) =
   ##
   ## .. code-block:: nim
   ##   pdf(filename="myProcess.png")  # overwrites/creates myProcess.png
-  let p = getCurrentProc()
   cmd("my_export_sz = '" & $width & "," & $height & "'")
   cmd("cmd = exportPdf('" & filename & "')")
   cmd("@cmd")
 
-addExitProc(close)
+addExitProc(closeGnuplot)
