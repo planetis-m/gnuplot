@@ -1,5 +1,5 @@
 # Gnuplotlib
-## Gnuplot interface for Nim
+gnuplot interface for Nim
 ### Examples
 #### Supports plotting to multiple Figures
 ```nim
@@ -28,6 +28,7 @@ Functions for printing to `pdf` and `png` files also included.
 
 Nim destructors close the `Figure` automatically on scope/application exit,
 finalizing the plot and sending the data to the gnuplot instance.
+This happens sequentially in lifo order.
 
 ### Limitations
 Does not support live updating plots, a `LiveFigure` might be added in future versions.

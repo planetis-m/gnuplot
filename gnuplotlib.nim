@@ -7,6 +7,7 @@ type
     replot: bool
 
 proc `=destroy`*(fig: var Figure)
+proc `=copy`*(fig: var Figure, src: Figure) {.error.}
 
 var
   nextIdNum = 0
@@ -50,7 +51,6 @@ proc `=destroy`*(fig: var Figure) =
     let inp = p.inputStream()
     inp.write(fig.content)
     inp.flush()
-
     `=destroy`(fig.content)
     discard p.waitForExit()
     if p.hasData():
@@ -60,10 +60,7 @@ proc `=destroy`*(fig: var Figure) =
     p.close()
 
 proc plotCmd(replot: bool; fig: Figure): string =
-  if replot and fig.replot:
-    "replot "
-  else:
-    "plot "
+  result = if replot and fig.replot: "replot " else: "plot "
 
 template plotFunctionImpl(extra: typed) =
   var line = plotCmd(replot, fig) & equation & " " & extra
@@ -74,10 +71,10 @@ template plotFunctionImpl(extra: typed) =
 
 template plotDataImpl(extra: typed) =
   let
-    title_line =
+    titleLine =
       if title == "": " notitle "
       else: " title '" & title & "' "
-    line = plotCmd(replot, fig) & extra & title_line
+    line = plotCmd(replot, fig) & extra & titleLine
   cmd(line, fig)
   fig.replot = true
 
