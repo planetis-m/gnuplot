@@ -5,11 +5,11 @@ var
   backgroundThread: Thread[Process]
   hasPlotted: bool
 
-proc getCurrentProc*(): Process =
+proc getCurrentProc(): Process =
   assert(currentProc != nil, "Initialize a new global Process with startGnuplot")
   currentProc
 
-proc setCurrentProc*(p: Process) =
+proc setCurrentProc(p: Process) =
   assert(currentProc == nil, "Global gnuplot Process already instantiated")
   currentProc = p
 
