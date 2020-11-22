@@ -1,89 +1,82 @@
-import std / [osproc, os, streams, strutils]
-
-type
-  Figure = object
-    content: string
-    idNum: int
-    replot: bool
-
-proc `=destroy`*(fig: var Figure)
-proc `=copy`*(fig: var Figure, src: Figure) {.error.}
+import std / [os, osproc, streams, strutils, exitprocs]
 
 var
-  nextIdNum = 0
-  currentFigure: Figure
+  currentProc: Process
+  backgroundThread: Thread[Process]
+  hasPlotted: bool
 
-let gnuplotExe = findExe("gnuplot")
+proc getCurrentProc*(): Process =
+  assert(currentProc != nil, "Initialize a new global Process with startGnuplot")
+  currentProc
 
-proc getCurrentFigure*(): var Figure =
-  assert(currentFigure.idNum != 0, "Initialize a new global Figure with startGnuplot")
-  currentFigure
+proc setCurrentProc*(p: Process) =
+  assert(currentProc == nil, "Global gnuplot Process already instantiated")
+  currentProc = p
 
-proc setCurrentFigure*(fig: sink Figure) =
-  assert(currentFigure.idNum == 0, "Global gnuplot Figure already instantiated")
-  currentFigure = fig
-
-proc cmd*(cmd: string; fig: var Figure = getCurrentFigure()) =
+proc cmd*(cmd: string) =
   ## Send a command to gnuplot
-  when defined(debugGnuplot): echo "Figure id: ", fig.idNum, ", Contents:\n", cmd
-  fig.content.add cmd
-  fig.content.add "\n"
+  when defined(debugGnuplot): echo "Contents:\n", cmd
+  let p = getCurrentProc()
+  try:
+    let inp = p.inputStream()
+    inp.writeLine(cmd)
+    inp.flush()
+  except:
+    stdout.write("Error: Couldn't send command to gnuplot\n")
+    quit(QuitFailure)
 
-proc initFigure*(): Figure =
-  ## Initiates a new Figure that communicates with gnuplot
-  if gnuplotExe == "":
-    raise newException(OSError, "Cannot find gnuplot: exe not in PATH")
-  inc(nextIdNum)
-  result = Figure(content: newStringOfCap(1_000), idNum: nextIdNum)
-  cmd("load 'setup.gp'", result)
+proc watchOutput(p: Process) {.thread.} =
+  let outp = p.outputStream()
+  while p.running() and not outp.atEnd():
+    let line = outp.readLine()
+    stdout.writeLine(line)
 
 proc startGnuplot*() =
   ## Starts gnuplot in a global instance
-  var fig = initFigure()
-  setCurrentFigure(fig)
+  let gnuplotExe = findExe("gnuplot")
+  if gnuplotExe == "":
+    raise newException(OSError, "Cannot find gnuplot: exe not in PATH")
+  let path = currentSourcePath.parentDir()
+  let p = startProcess(gnuplotExe, path, ["--persist"], options = {poStdErrToStdOut, poUsePath, poDaemon})
+  setCurrentProc(p)
+  createThread(backgroundThread, watchOutput, p)
+  cmd("load 'setup.gp'")
 
-proc `=destroy`*(fig: var Figure) =
-  ## close figure at the end of the session
-  if fig.idNum != 0:
-    cmd("exit", fig)
-    ## Starts gnuplot
-    let p = startProcess(gnuplotExe, args = ["-persist"])
-    let inp = p.inputStream()
-    inp.write(fig.content)
-    inp.flush()
-    `=destroy`(fig.content)
+proc close() {.noconv.} =
+  ## close Process at the end of the session
+  let p = getCurrentProc()
+  cmd("exit")
+  try:
     discard p.waitForExit()
-    if p.hasData():
-      let outp = p.outputStream()
-      let resp = outp.readAll()
-      echo(resp)
     p.close()
+  except:
+    discard
 
-proc plotCmd(replot: bool; fig: Figure): string =
-  result = if replot and fig.replot: "replot " else: "plot "
+proc plotCmd(replot: bool): string =
+  result = if replot and hasPlotted: "replot " else: "plot "
 
 template plotFunctionImpl(extra: typed) =
-  var line = plotCmd(replot, fig) & equation & " " & extra
+  var line = plotCmd(replot) & equation & " " & extra
   if title != "":
     line.add " title '" & title & "' "
-  cmd(line, fig)
-  fig.replot = true
+  cmd(line)
+  hasPlotted = true
 
 template plotDataImpl(extra: typed) =
   let
     titleLine =
       if title == "": " notitle "
       else: " title '" & title & "' "
-    line = plotCmd(replot, fig) & extra & titleLine
-  cmd(line, fig)
-  fig.replot = true
+    line = plotCmd(replot) & extra & titleLine
+  cmd(line)
+  hasPlotted = true
 
-proc plot*(equation: string; title, args = ""; replot = true;
-    fig: var Figure = getCurrentFigure()) =
+proc plot*(equation: string; title, args = ""; replot = true) =
   ## Plot an equation as understood by gnuplot. e.g.:
   ##
   ## .. code-block:: nim
   ##   plot "sin(x)/x"
+  let p = getCurrentProc()
   plotFunctionImpl(args)
 
 template fmt(x: string): string =
@@ -95,8 +88,7 @@ template fmt(x: SomeFloat): string =
 template fmt(x: untyped): string =
   $x
 
-proc plot*[T](xs: openarray[T]; title, args = ""; replot = true;
-    fig: var Figure = getCurrentFigure()) =
+proc plot*[T](xs: openarray[T]; title, args = ""; replot = true) =
   ## plot an array or seq of float64 values. e.g.:
   ##
   ## .. code-block:: nim
@@ -105,14 +97,15 @@ proc plot*[T](xs: openarray[T]; title, args = ""; replot = true;
   ##   let xs = newSeqWith(20, rand(1.0))
   ##
   ##   plot xs, "random values"
-  cmd("$d << EOD", fig)
+  let p = getCurrentProc()
+  cmd("$d << EOD")
   for x in xs:
-    cmd(fmt(x), fig)
-  cmd("EOD", fig)
+    cmd(fmt(x))
+  cmd("EOD")
   plotDataImpl(" $d " & args)
 
 proc plot*[X, Y](xs: openarray[X]; ys: openarray[Y];
-    title, args = ""; replot = true; fig: var Figure = getCurrentFigure()) =
+    title, args = ""; replot = true) =
   ## plot points taking x and y values from corresponding pairs in
   ## the given arrays.
   ##
@@ -154,32 +147,35 @@ proc plot*[X, Y](xs: openarray[X]; ys: openarray[Y];
   ##
   ##   plot x, y, "spiral"
   assert(xs.len == ys.len, "xs and ys must have the same length")
-  cmd("$d << EOD", fig)
+  let p = getCurrentProc()
+  cmd("$d << EOD")
   for i in 0 .. high(xs):
-    cmd(fmt(xs[i]) & " " & fmt(ys[i]), fig)
-  cmd("EOD", fig)
+    cmd(fmt(xs[i]) & " " & fmt(ys[i]))
+  cmd("EOD")
   plotDataImpl(" $d using 1:2 " & args)
 
-proc pdf*(filename = "tmp.pdf"; width = 16.9; height = 12.7;
-    fig: var Figure = getCurrentFigure()) =
+proc pdf*(filename = "tmp.pdf"; width = 16.9; height = 12.7) =
   ## script to make gnuplot print into a pdf file
   ## Size is given in cm.
   ## In order to change the font edit gnuplot variable my_font in style_template.
   ##
   ## .. code-block:: nim
-  ##   pdf(filename="myFigure.pdf")  # overwrites/creates myFigure.pdf
-  cmd("my_export_sz = '" & $width & "," & $height & "'", fig)
-  cmd("cmd = exportPdf('" & filename & "')", fig)
-  cmd("@cmd", fig)
+  ##   pdf(filename="myProcess.pdf")  # overwrites/creates myProcess.pdf
+  let p = getCurrentProc()
+  cmd("my_export_sz = '" & $width & "," & $height & "'")
+  cmd("cmd = exportPdf('" & filename & "')")
+  cmd("@cmd")
 
-proc png*(filename = "tmp.png", width = 640, height = 480;
-    fig: var Figure = getCurrentFigure()) =
+proc png*(filename = "tmp.png", width = 640, height = 480) =
   ## script to make gnuplot print into a png file
   ## Size is given in pixels.
   ## In order to change the font edit gnuplot variable my_font in style_template.
   ##
   ## .. code-block:: nim
-  ##   pdf(filename="myFigure.png")  # overwrites/creates myFigure.png
-  cmd("my_export_sz = '" & $width & "," & $height & "'", fig)
-  cmd("cmd = exportPdf('" & filename & "')", fig)
-  cmd("@cmd", fig)
+  ##   pdf(filename="myProcess.png")  # overwrites/creates myProcess.png
+  let p = getCurrentProc()
+  cmd("my_export_sz = '" & $width & "," & $height & "'")
+  cmd("cmd = exportPdf('" & filename & "')")
+  cmd("@cmd")
+
+addExitProc(close)
