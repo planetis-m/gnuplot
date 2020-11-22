@@ -36,11 +36,11 @@ proc startGnuplot*() =
   let gnuplotExe = findExe("gnuplot")
   if gnuplotExe == "":
     raise newException(OSError, "Cannot find gnuplot: exe not in PATH")
-  let path = currentSourcePath.parentDir()
-  let p = startProcess(gnuplotExe, path, ["--persist"], options = {poStdErrToStdOut, poUsePath, poDaemon})
+  let p = startProcess(gnuplotExe, args = ["--persist"], options = {poStdErrToStdOut, poUsePath, poDaemon})
   setCurrentProc(p)
   createThread(backgroundThread, watchOutput, p)
-  cmd("load 'setup.gp'")
+  let path = relativePath(currentSourcePath.parentDir(), getAppDir()) / "setup.gp"
+  cmd("load '" & path & "'")
 
 proc closeGnuplot() {.noconv.} =
   ## close Process at the end of the session

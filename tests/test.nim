@@ -23,3 +23,4 @@ plot x, y, "somecoin value over time"
 
 plot "sin(x)", title = "sin(x)", args = "with lines linestyle 2", false
 plot "cos(x)", title = "cos(x)", args = "with lines linestyle 3"
+pdf()

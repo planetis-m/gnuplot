@@ -3,6 +3,7 @@
 # Exclude readme file
 !/*.md
 !/*.nim
+!/*.nimble
 # Exclude root directories
 !/*/
 # Include all files in subdirectories
