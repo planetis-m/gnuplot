@@ -6,16 +6,17 @@ var
 
 proc cmd*(cmd: string) =
   ## Send a command to gnuplot
-  when defined(debugGnuplot): echo cmd
+  when defined(dbgGnuplot): echo cmd
   content.add cmd
   content.add "\n"
 
-proc startGnuplot*() =
-  ## Starts gnuplot in a global instance
-  let path = relativePath(currentSourcePath.parentDir(), getAppDir()) / "setup.gp"
+proc beginGnuplot*() =
+  ## Begins gnuplot plotting instance
+  let path = relativePath(currentSourcePath.parentDir(), getAppDir()) / "gnuplot/setup.gp"
   cmd("load '" & path & "'")
 
-proc closeGnuplot*() =
+proc endGnuplot*() =
+  ## Ends gnuplot instance
   cmd("exit")
   # Starts gnuplot
   let gnuplotExe = findExe("gnuplot")
@@ -31,6 +32,14 @@ proc closeGnuplot*() =
     let resp = outp.readAll()
     echo(resp)
   p.close()
+  content.setLen(0) # reset
+  hasPlotted = false
+
+template withGnuplot*(body: untyped): untyped =
+  beginGnuplot()
+  try:
+    body
+  finally: endGnuplot()
 
 proc plotCmd(replot: bool): string =
   result = if replot and hasPlotted: "replot " else: "plot "

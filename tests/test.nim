@@ -1,4 +1,4 @@
-import random, sequtils, ".."/gnuplotlib
+import random, sequtils, ".."/gnuplot
 
 let
   x = [
@@ -17,15 +17,12 @@ let
   ]
   y = newSeqWith(len(x), rand(10.0))
 
+withGnuplot:
+  cmd "set timefmt '%Y-%m-%d'"
+  cmd "set xdata time"
 
+  plot x, y, "somecoin value over time"
 
-startGnuplot()
-cmd "set timefmt '%Y-%m-%d'"
-cmd "set xdata time"
-
-plot x, y, "somecoin value over time"
-
-plot "sin(x)", title = "sin(x)", args = "with lines linestyle 2", false
-plot "cos(x)", title = "cos(x)", args = "with lines linestyle 3"
-pdf()
-closeGnuplot()
+  plot "sin(x)", title = "sin(x)", args = "with lines linestyle 2", false
+  plot "cos(x)", title = "cos(x)", args = "with lines linestyle 3"
+  pdf()
