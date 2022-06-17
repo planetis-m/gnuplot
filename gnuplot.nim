@@ -1,56 +1,36 @@
-import std / [os, osproc, streams, strutils, exitprocs]
+import std / [os, osproc, streams, strutils]
 
 var
-  currentProc: Process
-  backgroundThread: Thread[Process]
+  content = newStringOfCap(1_000)
   hasPlotted: bool
-
-proc getCurrentProc(): Process =
-  assert(currentProc != nil, "Initialize a new global Process with startGnuplot")
-  currentProc
-
-proc setCurrentProc(p: Process) =
-  assert(currentProc == nil, "Global gnuplot Process already instantiated")
-  currentProc = p
 
 proc cmd*(cmd: string) =
   ## Send a command to gnuplot
   when defined(debugGnuplot): echo cmd
-  let p = getCurrentProc()
-  try:
-    let inp = p.inputStream()
-    inp.writeLine(cmd)
-    inp.flush()
-  except:
-    stdout.write("Error: Couldn't send command to gnuplot\n")
-    quit(QuitFailure)
-
-proc watchOutput(p: Process) {.thread.} =
-  let outp = p.outputStream()
-  while p.running() and not outp.atEnd():
-    let line = outp.readLine()
-    stdout.writeLine(line)
+  content.add cmd
+  content.add "\n"
 
 proc startGnuplot*() =
   ## Starts gnuplot in a global instance
-  let gnuplotExe = findExe("gnuplot")
-  if gnuplotExe == "":
-    raise newException(OSError, "Cannot find gnuplot: exe not in PATH")
-  let p = startProcess(gnuplotExe, args = ["--persist"], options = {poStdErrToStdOut, poUsePath, poDaemon})
-  setCurrentProc(p)
-  createThread(backgroundThread, watchOutput, p)
   let path = relativePath(currentSourcePath.parentDir(), getAppDir()) / "setup.gp"
   cmd("load '" & path & "'")
 
-proc closeGnuplot() {.noconv.} =
-  ## close Process at the end of the session
-  let p = getCurrentProc()
+proc closeGnuplot*() =
   cmd("exit")
-  try:
-    discard p.waitForExit()
-    p.close()
-  except:
-    discard
+  # Starts gnuplot
+  let gnuplotExe = findExe("gnuplot")
+  if gnuplotExe == "":
+    raise newException(OSError, "Cannot find gnuplot: exe not in PATH")
+  let p = startProcess(gnuplotExe, args = ["--persist"])
+  let inp = p.inputStream()
+  inp.write(content)
+  inp.flush()
+  discard p.waitForExit()
+  if p.hasData():
+    let outp = p.outputStream()
+    let resp = outp.readAll()
+    echo(resp)
+  p.close()
 
 proc plotCmd(replot: bool): string =
   result = if replot and hasPlotted: "replot " else: "plot "
@@ -172,5 +152,3 @@ proc png*(filename = "tmp.png", width = 640, height = 480) =
   cmd("my_export_sz = '" & $width & "," & $height & "'")
   cmd("cmd = exportPdf('" & filename & "')")
   cmd("@cmd")
-
-addExitProc(closeGnuplot)
