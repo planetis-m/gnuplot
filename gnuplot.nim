@@ -12,7 +12,7 @@ proc cmd*(cmd: string) =
 
 proc beginGnuplot*() =
   ## Begins gnuplot plotting instance
-  let path = relativePath(currentSourcePath.parentDir(), getAppDir()) / "gnuplot/setup.gp"
+  let path = relativePath(currentSourcePath.parentDir(), getCurrentDir()) / "gnuplot/setup.gp"
   cmd("load '" & path & "'")
 
 proc endGnuplot*() =
