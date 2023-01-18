@@ -12,7 +12,7 @@ proc cmd*(cmd: string) =
 
 proc beginGnuplot*() =
   ## Begins gnuplot plotting instance
-  let path = relativePath(currentSourcePath.parentDir(), getAppDir()) / "gnuplot/setup.gp"
+  let path = relativePath(currentSourcePath.parentDir(), getCurrentDir()) / "gnuplot/setup.gp"
   cmd("load '" & path & "'")
 
 proc endGnuplot*() =
@@ -157,7 +157,7 @@ proc png*(filename = "tmp.png", width = 640, height = 480) =
   ## In order to change the font edit gnuplot variable my_font in style_template.
   ##
   ## .. code-block:: nim
-  ##   pdf(filename="myProcess.png")  # overwrites/creates myProcess.png
+  ##   png(filename="myProcess.png")  # overwrites/creates myProcess.png
   cmd("my_export_sz = '" & $width & "," & $height & "'")
-  cmd("cmd = exportPdf('" & filename & "')")
+  cmd("cmd = exportPng('" & filename & "')")
   cmd("@cmd")
