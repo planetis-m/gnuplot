@@ -1,7 +1,7 @@
 # mode = ScriptMode.Verbose
 
 packageName   = "gnuplot"
-version       = "2.7.0"
+version       = "2.7.1"
 author        = "Antonis Geralis"
 description   = "Nim gnuplot interface"
 license       = "MIT"
