@@ -12,7 +12,7 @@ proc cmd*(cmd: string) =
 
 proc beginGnuplot*() =
   ## Begins gnuplot plotting instance
-  let path = relativePath(currentSourcePath.parentDir(), getCurrentDir()) / "gnuplot/setup.gp"
+  let path = currentSourcePath.parentDir() / "gnuplot/setup.gp"
   cmd("load '" & path & "'")
 
 proc endGnuplot*() =
@@ -29,8 +29,9 @@ proc endGnuplot*() =
   discard p.waitForExit()
   if p.hasData():
     let outp = p.outputStream()
-    let resp = outp.readAll()
-    echo(resp)
+    if not outp.atEnd():
+      let resp = outp.readAll()
+      stdout.write(resp)
   p.close()
   content.setLen(0) # reset
   nplots = 0
