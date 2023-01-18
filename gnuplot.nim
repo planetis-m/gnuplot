@@ -2,7 +2,7 @@ import std / [os, osproc, streams, strutils]
 
 var
   content = newStringOfCap(1_000)
-  hasPlotted: bool
+  nplots = 0
 
 proc cmd*(cmd: string) =
   ## Send a command to gnuplot
@@ -33,7 +33,7 @@ proc endGnuplot*() =
     echo(resp)
   p.close()
   content.setLen(0) # reset
-  hasPlotted = false
+  nplots = 0
 
 template withGnuplot*(body: untyped): untyped =
   beginGnuplot()
@@ -42,14 +42,14 @@ template withGnuplot*(body: untyped): untyped =
   finally: endGnuplot()
 
 proc plotCmd(replot: bool): string =
-  result = if replot and hasPlotted: "replot " else: "plot "
+  result = if replot and nplots > 0: "replot " else: "plot "
 
 template plotFunctionImpl(extra: typed) =
   var line = plotCmd(replot) & equation & " " & extra
   if title != "":
     line.add " title '" & title & "' "
   cmd(line)
-  hasPlotted = true
+  nplots.inc
 
 template plotDataImpl(extra: typed) =
   let
@@ -58,7 +58,7 @@ template plotDataImpl(extra: typed) =
       else: " title '" & title & "' "
     line = plotCmd(replot) & extra & titleLine
   cmd(line)
-  hasPlotted = true
+  nplots.inc
 
 proc plot*(equation: string; title, args = ""; replot = true) =
   ## Plot an equation as understood by gnuplot. e.g.:
@@ -85,11 +85,11 @@ proc plot*[T](xs: openarray[T]; title, args = ""; replot = true) =
   ##   let xs = newSeqWith(20, rand(1.0))
   ##
   ##   plot xs, "random values"
-  cmd("$d << EOD")
+  cmd("$$d$# << EOD" % [$nplots])
   for x in xs:
     cmd(fmt(x))
   cmd("EOD")
-  plotDataImpl(" $d " & args)
+  plotDataImpl(" $$d$# $#" % [$nplots, args])
 
 proc plot*[X, Y](xs: openarray[X]; ys: openarray[Y];
     title, args = ""; replot = true) =
@@ -134,11 +134,11 @@ proc plot*[X, Y](xs: openarray[X]; ys: openarray[Y];
   ##
   ##   plot x, y, "spiral"
   assert(xs.len == ys.len, "xs and ys must have the same length")
-  cmd("$d << EOD")
+  cmd("$$d$# << EOD" % [$nplots])
   for i in 0 .. high(xs):
     cmd(fmt(xs[i]) & " " & fmt(ys[i]))
   cmd("EOD")
-  plotDataImpl(" $d using 1:2 " & args)
+  plotDataImpl(" $$d$# using 1:2 $#" % [$nplots, args])
 
 proc pdf*(filename = "tmp.pdf"; width = 16.9; height = 12.7) =
   ## script to make gnuplot print into a pdf file
